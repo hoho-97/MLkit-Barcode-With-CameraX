@@ -16,8 +16,8 @@ import java.nio.ByteBuffer
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
-/** Helper type alias used for analysis use case callbacks */
-typealias LumaListener = (luma: Double) -> Unit
+/** QR Debug용 리스너 : Alias변환 */
+typealias QRListener = (QR : String) -> Unit
 
 class MainActivity : AppCompatActivity() {
     private lateinit var outputDirectory: File
@@ -65,13 +65,21 @@ class MainActivity : AppCompatActivity() {
                     it.setSurfaceProvider(viewFinder.surfaceProvider)
                 }
 
+            // ImageAnalyzer : CameraX의 이미지 분석기 클래스
+            // ImageAnalyzer 객체 빌드
             val imageAnalyzer = ImageAnalysis.Builder()
+                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                    /** STRATEGY_KEEP_ONLY_LATEST : 비차단모드 = analyze()호출 시점 마지막 사용가능 프레임만 수신
+                     * 동시성 프레임으로 인한 다중 분석으로 원활한 인식이 불가할 수 있음
+                     * cf) 이미지 분석 기본설정 : STRATEGY_BLOCK_PRODUCER (차단모드)
+                    */
                 .build()
                 .also {
-                    it.setAnalyzer(cameraExecutor, LuminosityAnalyzer { luma ->
-                        Log.d(TAG, "Average luminosity: $luma")
+                    it.setAnalyzer(cameraExecutor, QRCodeAnalyzer { QR ->
+                        Log.d(TAG, "$QR")
                     })
                 }
+
             // 후방 카메라로 기본 설정
             val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
 
@@ -135,23 +143,21 @@ class MainActivity : AppCompatActivity() {
     }
 }
 
-private class LuminosityAnalyzer(private val listener: LumaListener) : ImageAnalysis.Analyzer {
-
+private class QRCodeAnalyzer(private val listener: QRListener) : ImageAnalysis.Analyzer {
+    //toByteArray 세팅
     private fun ByteBuffer.toByteArray(): ByteArray {
-        rewind()    // Rewind the buffer to zero
+        rewind()    // 버퍼 비우기
         val data = ByteArray(remaining())
-        get(data)   // Copy the buffer into a byte array
-        return data // Return the byte array
+        get(data)   // 버퍼를 ByteArray로 복사
+        return data // ByteArray 리턴
     }
-
+    //CameraX 분석 코드 : 화면 인식
     override fun analyze(image: ImageProxy) {
+        val buffer = image.planes[0].buffer   //버퍼 불러오기
+        val data = buffer.toByteArray()       //분석 데이터 초기화
 
-        val buffer = image.planes[0].buffer
-        val data = buffer.toByteArray()
-        val pixels = data.map { it.toInt() and 0xFF }
-        val luma = pixels.average()
-
-        listener(luma)
+        //test용 코드
+        listener("Not yet, Request To Write Code")
 
         image.close()
     }
